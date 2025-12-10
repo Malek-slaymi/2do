@@ -1,5 +1,12 @@
 pipeline {
   agent any
+  options {
+    timeout(time: 30, unit: 'MINUTES')
+    timestamps()
+  }
+  environment {
+    IMAGE_NAME = "react-ci-pr:${env.BUILD_NUMBER}"
+  }
 
   stages {
     stage('Checkout') {
@@ -7,35 +14,59 @@ pipeline {
     }
 
     stage('Install') {
-      steps { bat "npm ci" }
+      steps {
+        bat 'npm ci'
+      }
     }
 
     stage('Build') {
-      steps { bat "npm run build" }
+      steps {
+        bat 'npm run build'
+      }
     }
 
     stage('Docker Build') {
-      steps { bat "docker build -t react-ci-pr ."}
+      steps {
+        // Build image (uses Dockerfile at repo root)
+        bat "docker build -t ${IMAGE_NAME} ."
+      }
     }
 
     stage('Run Container') {
-      steps { bat "docker run -d --name pr_test -p 3000:80 react-ci-pr" }
+      steps {
+        // Run container in background; map 3000->80 as your Dockerfile exposes nginx on 80
+        bat "docker run -d --name pr_test -p 3000:80 ${IMAGE_NAME}"
+      }
     }
 
     stage('Smoke Test') {
-      steps { bat "./smoke.sh http://localhost:3000" }
+      steps {
+        // Run smoke.sh using bash (Git Bash) — if you don't have bash, see alternative below.
+        bat 'bash ./smoke.sh http://localhost:3000'
+      }
+      post {
+        failure {
+          // print container logs to help debugging
+          bat 'docker logs pr_test || echo "no logs / container missing"'
+        }
+      }
     }
 
     stage('Archive Results') {
       steps {
-        archiveArtifacts artifacts: "build/**"
+        // Vite produces dist/ by default — archive that.
+        archiveArtifacts artifacts: 'dist/**', fingerprint: true
       }
     }
   }
 
   post {
     always {
-      bat "docker rm -f pr_test || true"
+      // Safe cleanup: attempt to remove the container and image, but don't fail the pipeline if not present
+      bat 'docker rm -f pr_test || echo "pr_test not present"'
+      bat "docker rmi ${IMAGE_NAME} || echo 'image not present or in use'"
     }
+    success { echo "Pipeline succeeded" }
+    failure { echo "Pipeline failed — check the console and docker logs above." }
   }
 }
