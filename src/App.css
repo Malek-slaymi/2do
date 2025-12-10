@@ -1,0 +1,257 @@
+/* Variables de couleur pour un thème clair et organisé */
+:root {
+  --background-color: #f4f7f6;     /* Fond très clair */
+  --card-color: #ffffff;           /* Blanc pour les cartes et conteneurs */
+  --text-color: #333333;           /* Texte foncé */
+  --primary-color: #007bff;         /* Bleu pour les actions principales */
+  --secondary-color: #6c757d;       /* Gris secondaire */
+  --success-color: #28a745;        /* Vert pour Terminer */
+  --danger-color: #dc3545;         /* Rouge pour Supprimer */
+  --border-radius: 8px;
+  --transition-speed: 0.3s;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Styles globaux */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  line-height: 1.6;
+}
+
+/* --- Styles pour Login.jsx --- */
+
+.login-container {
+    width: 90%;
+    max-width: 350px;
+    margin: 100px auto;
+    padding: 30px;
+    background-color: var(--card-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+
+.login-container h2 {
+    color: var(--primary-color);
+    margin-bottom: 25px;
+    font-weight: 600;
+}
+
+.login-container form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.login-container input {
+    padding: 12px;
+    border: 1px solid #ced4da;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+    color: var(--text-color);
+    font-size: 16px;
+    transition: border-color var(--transition-speed);
+}
+
+.login-container input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+.login-container button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    transition: background-color var(--transition-speed);
+}
+
+.login-container button:hover {
+    background-color: #0056b3;
+}
+
+/* Style pour le bouton d'échange (Login/Sign Up) */
+.login-switch {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.login-switch p {
+    margin: 0 0 10px 0;
+    color: var(--secondary-color);
+    font-size: 0.9em;
+}
+
+.switch-btn {
+    background: none;
+    color: var(--primary-color);
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    font-size: 1em;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+/* --- Styles pour TodoPage.jsx --- */
+
+.todo-container {
+  width: 90%;
+  max-width: 700px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: var(--card-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+}
+
+.header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.header-bar h2 {
+    font-size: 1.8em;
+    color: var(--primary-color);
+    margin: 0;
+}
+
+.logout-btn {
+  background-color: var(--danger-color);
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color var(--transition-speed);
+}
+
+.logout-btn:hover {
+  background-color: #c82333; 
+}
+
+/* Zone d'entrée de tâche */
+.input-area {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.input-area input[type="text"] {
+  flex-grow: 1;
+  padding: 12px;
+  border: 1px solid #ced4da;
+  border-radius: var(--border-radius);
+  background-color: white;
+  color: var(--text-color);
+  font-size: 16px;
+}
+
+.input-area button {
+  background-color: var(--success-color);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color var(--transition-speed);
+}
+
+.input-area button:hover {
+  background-color: #1e7e34; 
+}
+
+/* Liste des tâches */
+.task-list {
+  list-style: none;
+  padding: 0;
+}
+
+.task {
+  background-color: #f8f9fa;
+  margin: 12px 0;
+  padding: 15px;
+  border-radius: var(--border-radius);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-left: 5px solid transparent;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.task:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.task span {
+  flex-grow: 1;
+  margin-right: 15px;
+}
+
+.task strong {
+  color: var(--secondary-color);
+  margin-right: 5px;
+  font-size: 0.9em;
+}
+
+/* Statut des tâches */
+.task.pending {
+  border-left-color: #ffc107; /* Jaune/Orange */
+}
+
+.task.done {
+  background-color: #e9ecef;
+  border-left-color: var(--success-color);
+  text-decoration: line-through;
+  color: var(--secondary-color);
+}
+
+/* Boutons d'action */
+.task-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.finish-btn, .delete-btn {
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color var(--transition-speed);
+  font-size: 0.9em;
+}
+
+.finish-btn {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.finish-btn:hover {
+  background-color: #1e7e34; 
+}
+
+.delete-btn {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.delete-btn:hover {
+    background-color: #c82333; 
+}
