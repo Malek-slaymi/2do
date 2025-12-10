@@ -1,50 +1,63 @@
 pipeline {
-  agent any
-
+  agent { label 'docker' }
   environment {
-    VERSION = sh(script: "git describe --tags", returnStdout: true).trim()
+    APP_DIR = 'frontend'
   }
-
+  triggers {
+    // Multibranch should detect tags and run this Jenkinsfile if branch is a tag
+  }
   stages {
-    stage('Checkout') {
-      steps { checkout scm }
-    }
+    stage('Checkout') { steps { checkout scm } }
 
-    stage('Install') {
-      steps { bat "npm ci" }
-    }
-
-    stage('Build') {
-      steps { bat "npm run build" }
-    }
-
-    stage('Docker Build') {
+    stage('Setup') {
       steps {
-        bat "docker build -t react-app:${VERSION} ."
+        dir(APP_DIR) { sh 'npm ci' }
       }
     }
 
-    stage('Run Container') {
+    stage('Build') {
       steps {
-        bat "docker run -d --name tag_test -p 3000:80 react-app:${VERSION}"
+        dir(APP_DIR) { sh 'npm run build' }
+      }
+    }
+
+    stage('Run (Docker)') {
+      steps {
+        dir(APP_DIR) {
+          script {
+            def tag = env.GIT_TAG ?: env.BRANCH_NAME // Jenkins may expose tag in BRANCH_NAME e.g. refs/tags/v1.0.0
+            def image = "myorg/frontend:${tag}"
+            bat "docker build -t ${image} ."
+            bat "docker save ${image} -o ${WORKSPACE}/artifact-image-${tag}.tar"
+          }
+        }
       }
     }
 
     stage('Smoke Test') {
-      steps { bat "./smoke.sh http://localhost:3000" }
+      steps {
+        dir(APP_DIR) {
+          // can load the image locally and run
+          bat "docker load -i ${WORKSPACE}/artifact-image-${env.BRANCH_NAME}.tar || true"
+          bat "docker run -d --rm -p 8090:80 --name tag_run_${BUILD_ID} myorg/frontend:${env.BRANCH_NAME}"
+          bat 'sleep 3'
+          bat "./smoke-test.sh http://localhost:8090 20 || true"
+          bat 'cat smoke-result.json || true'
+        }
+      }
     }
 
-    stage('Archive Versioned Build') {
+    stage('Archive Artifacts') {
       steps {
-        bat "tar -czf build-${VERSION}.tar.gz build/"
-        archiveArtifacts artifacts: "build-${VERSION}.tar.gz"
+        archiveArtifacts artifacts: "${APP_DIR}/build/**, ${WORKSPACE}/artifact-image-*.tar, ${APP_DIR}/smoke-result.json", fingerprint: true
       }
     }
   }
-
   post {
     always {
-      bat "docker rm -f tag_test || true"
+      bat "docker ps -a -q --filter name=tag_run_${BUILD_ID} | xargs -r docker rm -f || true"
+      // push image to registry if desired (requires credentials)
+      // withCredentials(...) { sh "docker login ... && docker push myorg/frontend:${env.BRANCH_NAME}" }
     }
   }
 }

@@ -1,72 +1,76 @@
 pipeline {
-  agent any
-  options {
-    timeout(time: 30, unit: 'MINUTES')
-    timestamps()
-  }
+  agent { label 'docker' } // adapte à ton agent
   environment {
-    IMAGE_NAME = "react-ci-pr:${env.BUILD_NUMBER}"
+    APP_DIR = 'frontend'
+    IMAGE = "myapp:${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
   }
-
+  triggers { /* none; Multibranch triggers on PR automatically */ }
   stages {
     stage('Checkout') {
       steps { checkout scm }
     }
-
-    stage('Install') {
+    stage('Setup') {
       steps {
-        bat 'npm ci'
+        dir(APP_DIR) {
+          bat 'node -v || true'
+          bat 'npm ci'
+        }
       }
     }
-
     stage('Build') {
       steps {
-        bat 'npm run build'
+        dir(APP_DIR) {
+          bat 'npm run build'
+        }
       }
     }
 
-    stage('Docker Build') {
+    stage('Run (Docker)') {
       steps {
-        // Build image (uses Dockerfile at repo root)
-        bat "docker build -t ${IMAGE_NAME} ."
-      }
-    }
-
-    stage('Run Container') {
-      steps {
-        // Run container in background; map 3000->80 as your Dockerfile exposes nginx on 80
-        bat "docker run -d --name pr_test -p 3000:80 ${IMAGE_NAME}"
+        dir(APP_DIR) {
+          script {
+            bat "docker build -t ${IMAGE} ."
+            bat "docker run -d --rm -p 8080:80 --name smoke_${BUILD_ID} ${IMAGE}"
+            // Give it a bit to start
+            bat "sleep 3"
+          }
+        }
       }
     }
 
     stage('Smoke Test') {
       steps {
-        // Run smoke.sh using bash (Git Bash) — if you don't have bash, see alternative below.
-        bat 'bash ./smoke.sh http://localhost:3000'
-      }
-      post {
-        failure {
-          // print container logs to help debugging
-          bat 'docker logs pr_test || echo "no logs / container missing"'
+        dir(APP_DIR) {
+          // run the smoke script against the running container
+          bat "./smoke-test.sh http://localhost:8080 20 || true"
+          // ensure smoke-result.json exists
+          bat 'cat smoke-result.json || true'
         }
       }
+      post {
+        success { echo "Smoke stage finished — check smoke-result.json" }
+        unsuccessful { echo "Smoke failed — see smoke-result.json" }
+      }
     }
 
-    stage('Archive Results') {
+    stage('Archive Artifacts') {
       steps {
-        // Vite produces dist/ by default — archive that.
-        archiveArtifacts artifacts: 'dist/**', fingerprint: true
+        archiveArtifacts artifacts: "${APP_DIR}/build/**, ${APP_DIR}/smoke-result.json", fingerprint: true
+        junit allowEmptyResults: true, testResults: '**/test-results/*.xml' // si tu as tests unitaires
       }
     }
   }
-
   post {
     always {
-      // Safe cleanup: attempt to remove the container and image, but don't fail the pipeline if not present
-      bat 'docker rm -f pr_test || echo "pr_test not present"'
-      bat "docker rmi ${IMAGE_NAME} || echo 'image not present or in use'"
+      stage('Cleanup') {
+        steps {
+          bat "docker ps -a -q --filter name=smoke_${BUILD_ID} | xargs -r docker rm -f || true"
+          bat "docker rmi ${IMAGE} || true"
+        }
+      }
+      failure { echo "Pipeline failed - see logs" }
+      success { echo "Pipeline succeeded" }
     }
-    success { echo "Pipeline succeeded" }
-    failure { echo "Pipeline failed — check the console and docker logs above." }
   }
 }
+
