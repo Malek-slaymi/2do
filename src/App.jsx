@@ -1,15 +1,21 @@
 // src/App.jsx
+// src/App.jsx
 
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import Login from "./components/Login";
 import TodoPage from "./components/TodoPage";
-import { getCurrentUser } from './auth';
-import './app.css';
+import { getCurrentUser } from "./auth";
+import "./App.css";
 
 function App() {
   // user stockera l'objet { email: '...' } ou null
-  const [user, setUser] = useState(null); 
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Charger l'utilisateur connecté au démarrage
@@ -25,7 +31,7 @@ function App() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', marginTop: '50px', color: '#f0f0f0' }}>
+      <div style={{ textAlign: "center", marginTop: "50px", color: "#f0f0f0" }}>
         Chargement de l'application...
       </div>
     );
@@ -34,14 +40,15 @@ function App() {
   return (
     <Router>
       <Routes>
-
         {/* Route de connexion (path="/") */}
         <Route
           path="/"
           element={
-            user
-              ? <Navigate to="/todos" replace />
-              : <Login setUser={setUser} /> 
+            user ? (
+              <Navigate to="/todos" replace />
+            ) : (
+              <Login setUser={setUser} />
+            )
           }
         />
 
@@ -49,9 +56,11 @@ function App() {
         <Route
           path="/todos"
           element={
-            user
-              ? <TodoPage user={user} setUser={setUser} /> 
-              : <Navigate to="/" replace />
+            user ? (
+              <TodoPage user={user} setUser={setUser} />
+            ) : (
+              <Navigate to="/" replace />
+            )
           }
         />
 
@@ -60,7 +69,6 @@ function App() {
           path="*"
           element={<Navigate to={user ? "/todos" : "/"} replace />}
         />
-
       </Routes>
     </Router>
   );
