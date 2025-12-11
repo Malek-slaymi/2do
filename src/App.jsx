@@ -5,7 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from "./components/Login";
 import TodoPage from "./components/TodoPage";
 import { getCurrentUser } from './auth';
-import './app.css';
+import './App.css';
 
 function App() {
   // user stockera l'objet { email: '...' } ou null
