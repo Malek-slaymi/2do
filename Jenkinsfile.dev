@@ -22,6 +22,10 @@ pipeline {
                 bat '''
                     docker --version
                     docker system prune -f
+                    echo Pulling base images...
+                    docker pull node:20-alpine
+                    docker pull nginx:stable-alpine
+                    echo Images pulled successfully
                 '''
             }
         }
@@ -31,7 +35,7 @@ pipeline {
                 echo '=== Stage 2.5: Pre-Cleanup ==='
                 bat '''
                     echo Cleaning up any existing containers on port %PORT%...
-                    FOR /F "tokens=*" %%i IN ('docker ps -aq --filter "name=2do"') DO (
+                    FOR /F "tokens=*" %%i IN ('docker ps -aq --filter "name=booking-dev"') DO (
                         docker stop %%i 2>nul || echo Container already stopped
                         docker rm %%i 2>nul || echo Container already removed
                     )
@@ -40,34 +44,40 @@ pipeline {
             }
         }
         
-      stage('Build') {
-    parallel {
-        stage('Build Standard') {
-            steps {
-                bat '''
-                    docker build -t %IMAGE_NAME%-standard .
-                    echo [PASSED] Standard build
-                '''
+        stage('Build') {
+            parallel {
+                stage('Build Standard') {
+                    steps {
+                        retry(2) {
+                            bat '''
+                                docker build -t %IMAGE_NAME%-standard .
+                                echo [PASSED] Standard build
+                            '''
+                        }
+                    }
+                }
+                stage('Build Optimized') {
+                    steps {
+                        retry(2) {
+                            bat '''
+                                docker build -t %IMAGE_NAME%-optimized --compress .
+                                echo [PASSED] Optimized build
+                            '''
+                        }
+                    }
+                }
+                stage('Build Debug') {
+                    steps {
+                        retry(2) {
+                            bat '''
+                                docker build -t %IMAGE_NAME%-debug --target build .
+                                echo [PASSED] Debug build
+                            '''
+                        }
+                    }
+                }
             }
         }
-        stage('Build Optimized') {
-            steps {
-                bat '''
-                    docker build -t %IMAGE_NAME%-optimized --compress .
-                    echo [PASSED] Optimized build
-                '''
-            }
-        }
-        stage('Build Debug') {
-            steps {
-                bat '''
-                    docker build -t %IMAGE_NAME%-debug --target build .
-                    echo [PASSED] Debug build
-                '''
-            }
-        }
-    }
-}
         
         stage('Run') {
             steps {
