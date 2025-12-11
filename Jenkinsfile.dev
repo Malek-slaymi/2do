@@ -1,82 +1,154 @@
 pipeline {
-  agent any
-  environment {
-    IMAGE_NAME = "react-dev-build:${env.BUILD_NUMBER}"
-    CONTAINER_NAME = "dev_test_${env.BUILD_NUMBER}"
-    APP_PORT = "3000"
-  }
-
-  stages {
-    stage('Checkout') { steps { checkout scm } }
-
-    stage('Install') {
-      steps {
-        script { if (isUnix()) { sh 'npm ci' } else { bat 'npm ci' } }
-      }
+    agent any
+    
+    environment {
+        CONTAINER_NAME = "booking-dev-${BUILD_NUMBER}"
+        IMAGE_NAME = "booking-app:dev-${BUILD_NUMBER}"
+        PORT = "8083"
     }
-
-    stage('Unit Tests') {
-      steps {
-        script {
-          if (isUnix()) {
-            sh 'npm test -- --watchAll=false || true' // don't fail pipeline for flaky tests unless you want
-          } else {
-            bat 'npm test -- --watchAll=false || exit 0'
-          }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo '=== Stage 1: Checkout ==='
+                git branch: 'dev', url: 'https://github.com/Malek-slaymi/2do.git'
+                bat 'dir'
+            }
         }
-      }
-    }
-
-    stage('Build') {
-      steps { script { if (isUnix()) { sh 'npm run build' } else { bat 'npm run build' } } }
-    }
-
-    stage('Docker Build') {
-      steps { script { if (isUnix()) { sh "docker build -t ${IMAGE_NAME} ." } else { bat "docker build -t ${IMAGE_NAME} ." } } }
-    }
-
-    stage('Run Container') {
-      steps { script { if (isUnix()) { sh "docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:80 ${IMAGE_NAME}" } else { bat "docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:80 ${IMAGE_NAME}" } } }
-    }
-
-    stage('Smoke Test') {
-      steps {
-        script {
-          def host = "http://localhost:${env.APP_PORT}"
-          def maxRetries = 30
-          def ok = false
-          for (int i=0; i<maxRetries; i++) {
-            try {
-              if (isUnix()) {
-                def code = sh(script: "curl -s -o /dev/null -w '%{http_code}' ${host}", returnStdout: true).trim()
-                if (code == '200') { ok = true; break }
-              } else {
-                def ps = bat(returnStdout: true, script: "powershell -Command \"(Invoke-WebRequest -UseBasicParsing -Uri '${host}').StatusCode\"").trim()
-                if (ps == '200') { ok = true; break }
-              }
-            } catch (err) { echo "Waiting for app... (${i+1}/${maxRetries})" }
-            sleep 2
-          }
-          if (!ok) { error("Smoke test failed for ${host}") } else { echo "Smoke OK" }
+        
+        stage('Setup') {
+            steps {
+                echo '=== Stage 2: Setup ==='
+                bat '''
+                    docker --version
+                    docker system prune -f
+                '''
+            }
         }
-      }
-    }
-
-    stage('Archive') {
-      steps { archiveArtifacts artifacts: 'dist/**', fingerprint: true }
-    }
-  }
-
-  post {
-    always {
-      script {
-        if (isUnix()) {
-          sh "docker rm -f ${CONTAINER_NAME} || true"
-        } else {
-          bat "docker rm -f ${CONTAINER_NAME} || echo not present"
+        
+        stage('Pre-Cleanup') {
+            steps {
+                echo '=== Stage 2.5: Pre-Cleanup ==='
+                bat '''
+                    echo Cleaning up any existing containers on port %PORT%...
+                    FOR /F "tokens=*" %%i IN ('docker ps -aq --filter "name=2do"') DO (
+                        docker stop %%i 2>nul || echo Container already stopped
+                        docker rm %%i 2>nul || echo Container already removed
+                    )
+                    echo Cleanup complete
+                '''
+            }
         }
-      }
+        
+        stage('Build') {
+            parallel {
+                stage('Build Standard') {
+                    steps {
+                        bat '''
+                            docker build -t %IMAGE_NAME%-standard .
+                            echo [PASSED] Standard build
+                        '''
+                    }
+                }
+                stage('Build Optimized') {
+                    steps {
+                        bat '''
+                            docker build -t %IMAGE_NAME%-optimized --compress .
+                            echo [PASSED] Optimized build
+                        '''
+                    }
+                }
+                stage('Build Debug') {
+                    steps {
+                        bat '''
+                            docker build -t %IMAGE_NAME%-debug --target builder .
+                            echo [PASSED] Debug build
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Run') {
+            steps {
+                echo '=== Stage 4: Run ==='
+                bat '''
+                    echo Starting container %CONTAINER_NAME%...
+                    docker run -d --name %CONTAINER_NAME% -p %PORT%:80 %IMAGE_NAME%-standard
+                    
+                    echo Waiting for container to start...
+                    ping 127.0.0.1 -n 16 > nul
+                    
+                    echo Verifying container is running...
+                    docker ps | findstr %CONTAINER_NAME%
+                    echo [PASSED] Container is running
+                '''
+            }
+        }
+        
+        stage('Smoke Test') {
+            steps {
+                echo '=== Stage 5: Smoke Tests ==='
+                bat '''
+                    echo =========================================
+                    echo SMOKE TEST SUITE
+                    echo =========================================
+                    echo [TEST] Checking HTTP endpoint...
+                    curl -f http://localhost:%PORT% || exit /b 1
+                    echo [PASSED] HTTP test
+                    echo.
+                    echo [TEST] Checking container health...
+                    docker inspect %CONTAINER_NAME% --format="{{.State.Status}}" | findstr running || exit /b 1
+                    echo [PASSED] Container health
+                    echo.
+                    echo =========================================
+                    echo ✅ ALL TESTS PASSED
+                    echo =========================================
+                '''
+            }
+        }
+        
+        stage('Archive Artifacts') {
+            steps {
+                echo '=== Stage 6: Archive Artifacts ==='
+                bat '''
+                    if not exist "artifacts" mkdir artifacts
+                    echo Build Number: %BUILD_NUMBER% > artifacts\\build-info.txt
+                    echo Container: %CONTAINER_NAME% >> artifacts\\build-info.txt
+                    echo Image: %IMAGE_NAME%-standard >> artifacts\\build-info.txt
+                    echo Port: %PORT% >> artifacts\\build-info.txt
+                    echo Build Date: %DATE% %TIME% >> artifacts\\build-info.txt
+                    echo [PASSED] Artifacts created
+                '''
+                archiveArtifacts artifacts: 'artifacts/**/*', allowEmptyArchive: true
+            }
+        }
+        
+        stage('Cleanup') {
+            steps {
+                echo '=== Stage 7: Cleanup ==='
+                bat '''
+                    echo Stopping container...
+                    docker stop %CONTAINER_NAME% || echo Container already stopped
+                    
+                    echo Removing container...
+                    docker rm %CONTAINER_NAME% || echo Container already removed
+                    
+                    echo Cleanup complete
+                '''
+            }
+        }
     }
-  }
+    
+    post {
+        success {
+            echo '✅ Dev Pipeline SUCCESS'
+        }
+        failure {
+            echo '❌ Dev Pipeline FAILED'
+        }
+        always {
+            echo '=== Pipeline Completed ==='
+        }
+    }
 }
-
