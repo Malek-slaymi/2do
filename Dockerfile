@@ -1,15 +1,15 @@
-# Stage 1 : build (Node 20)
+# Build stage
 FROM node:20-alpine AS build
 WORKDIR /app
-# copy only package files first for better caching
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --silent
 COPY . .
 RUN npm run build
 
-# Stage 2 : production image (nginx)
+# Production stage
 FROM nginx:stable-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
+
 

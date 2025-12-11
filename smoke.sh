@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 set -e
+
 HOST=${1:-http://localhost:3000}
-for i in {1..20}; do
-  if curl -s --fail "$HOST" >/dev/null; then
-    break
-  fi
+TIMEOUT=${2:-30}
+
+end=$((SECONDS+TIMEOUT))
+while ! curl -sSf "$HOST" >/dev/null 2>&1; do
   sleep 1
+  if [ $SECONDS -ge $end ]; then
+    echo "{\"smoke\":\"FAILED\",\"reason\":\"timeout waiting for $HOST\"}" > smoke-result.json
+    exit 1
+  fi
 done
 
-HTTP_STATUS=$(curl -s -o /tmp/smoke_out.html -w "%{http_code}" "$HOST")
-if [ "$HTTP_STATUS" != "200" ]; then
-  echo "Smoke failed: status $HTTP_STATUS"
-  exit 1
-fi
-if grep -q "React" /tmp/smoke_out.html; then
-  echo "Smoke OK"
+if curl -s "$HOST" | grep -q "React"; then
+  echo "{\"smoke\":\"PASSED\"}" > smoke-result.json
+  echo "SMOKE PASSED"
   exit 0
 else
-  echo "Smoke failed: expected 'React' in page"
-  exit 1
+  echo "{\"smoke\":\"FAILED\",\"reason\":\"content mismatch\"}" > smoke-result.json
+  echo "SMOKE FAILED"
+  exit 2
 fi

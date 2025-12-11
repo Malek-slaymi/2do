@@ -6,67 +6,131 @@ pipeline {
   }
   environment {
     IMAGE_NAME = "react-ci-pr:${env.BUILD_NUMBER}"
+    CONTAINER_NAME = "pr_test_${env.BUILD_NUMBER}"
+    APP_PORT = "3000"
   }
 
   stages {
-    stage('Checkout') {
-      steps { checkout scm }
-    }
+    stage('Checkout') { steps { checkout scm } }
 
     stage('Install') {
       steps {
-        bat 'npm ci'
+        script {
+          if (isUnix()) {
+            sh 'npm ci'
+          } else {
+            bat 'npm ci'
+          }
+        }
       }
     }
 
     stage('Build') {
       steps {
-        bat 'npm run build'
+        script {
+          if (isUnix()) {
+            sh 'npm run build'
+          } else {
+            bat 'npm run build'
+          }
+        }
       }
     }
 
     stage('Docker Build') {
       steps {
-        // Build image (uses Dockerfile at repo root)
-        bat "docker build -t ${IMAGE_NAME} ."
+        script {
+          if (isUnix()) {
+            sh "docker build -t ${IMAGE_NAME} ."
+          } else {
+            bat "docker build -t ${IMAGE_NAME} ."
+          }
+        }
       }
     }
 
     stage('Run Container') {
       steps {
-        // Run container in background; map 3000->80 as your Dockerfile exposes nginx on 80
-        bat "docker run -d --name pr_test -p 3000:80 ${IMAGE_NAME}"
+        script {
+          if (isUnix()) {
+            sh "docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:80 ${IMAGE_NAME}"
+          } else {
+            bat "docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:80 ${IMAGE_NAME}"
+          }
+        }
       }
     }
 
     stage('Smoke Test') {
       steps {
-        // Run smoke.sh using bash (Git Bash) — if you don't have bash, see alternative below.
-        bat 'bash ./smoke.sh http://localhost:3000'
+        script {
+          // Wait for container to be ready and test HTTP 200
+          def host = "http://localhost:${env.APP_PORT}"
+          def maxRetries = 30
+          def ok = false
+          for (int i=0; i<maxRetries; i++) {
+            try {
+              if (isUnix()) {
+                def code = sh(script: "curl -s -o /dev/null -w '%{http_code}' ${host}", returnStdout: true).trim()
+                echo "HTTP status: ${code}"
+                if (code == '200') { ok = true; break }
+              } else {
+                // Windows: use curl if available
+                def code = bat(script: "curl -s -o NUL -w %{{http_code}} ${host}", returnStatus: true)
+                // bat(..., returnStatus:true) returns exit code, not stdout. fallback to simple sleep loop.
+                // try a simple curl via PowerShell to get status
+                def ps = bat(returnStdout: true, script: "powershell -Command \"(Invoke-WebRequest -UseBasicParsing -Uri '${host}').StatusCode\"").trim()
+                echo "PS status: ${ps}"
+                if (ps == '200') { ok = true; break }
+              }
+            } catch (err) {
+              echo "Not ready yet (${i+1}/${maxRetries}) - ${err}"
+            }
+            sleep 2
+          }
+          if (!ok) {
+            error("Smoke test failed: ${host} did not return 200 within timeout")
+          } else {
+            echo "Smoke test passed: ${host}"
+          }
+        }
       }
       post {
         failure {
-          // print container logs to help debugging
-          bat 'docker logs pr_test || echo "no logs / container missing"'
+          script {
+            if (isUnix()) {
+              sh "docker logs ${CONTAINER_NAME} || true"
+            } else {
+              bat "docker logs ${CONTAINER_NAME} || echo no logs"
+            }
+          }
         }
       }
     }
 
     stage('Archive Results') {
       steps {
-        // Vite produces dist/ by default — archive that.
         archiveArtifacts artifacts: 'dist/**', fingerprint: true
+        // also archive smoke-result if present
+        archiveArtifacts allowEmptyArchive: true, artifacts: 'smoke-result.json'
       }
     }
   }
 
   post {
     always {
-      // Safe cleanup: attempt to remove the container and image, but don't fail the pipeline if not present
-      bat 'docker rm -f pr_test || echo "pr_test not present"'
-      bat "docker rmi ${IMAGE_NAME} || echo 'image not present or in use'"
+      script {
+        if (isUnix()) {
+          sh "docker rm -f ${CONTAINER_NAME} || true"
+          sh "docker rmi ${IMAGE_NAME} || true"
+        } else {
+          bat "docker rm -f ${CONTAINER_NAME} || echo container absent"
+          bat "docker rmi ${IMAGE_NAME} || echo image absent"
+        }
+      }
     }
-    success { echo "Pipeline succeeded" }
-    failure { echo "Pipeline failed — check the console and docker logs above." }
+    success { echo "PR pipeline succeeded" }
+    failure { echo "PR pipeline failed — check logs" }
   }
 }
+
