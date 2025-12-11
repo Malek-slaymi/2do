@@ -40,34 +40,34 @@ pipeline {
             }
         }
         
-        stage('Build') {
-            parallel {
-                stage('Build Standard') {
-                    steps {
-                        bat '''
-                            docker build -t %IMAGE_NAME%-standard .
-                            echo [PASSED] Standard build
-                        '''
-                    }
-                }
-                stage('Build Optimized') {
-                    steps {
-                        bat '''
-                            docker build -t %IMAGE_NAME%-optimized --compress .
-                            echo [PASSED] Optimized build
-                        '''
-                    }
-                }
-                stage('Build Debug') {
-                    steps {
-                        bat '''
-                            docker build -t %IMAGE_NAME%-debug --target builder .
-                            echo [PASSED] Debug build
-                        '''
-                    }
-                }
+      stage('Build') {
+    parallel {
+        stage('Build Standard') {
+            steps {
+                bat '''
+                    docker build -t %IMAGE_NAME%-standard .
+                    echo [PASSED] Standard build
+                '''
             }
         }
+        stage('Build Optimized') {
+            steps {
+                bat '''
+                    docker build -t %IMAGE_NAME%-optimized --compress .
+                    echo [PASSED] Optimized build
+                '''
+            }
+        }
+        stage('Build Debug') {
+            steps {
+                bat '''
+                    docker build -t %IMAGE_NAME%-debug --target build .
+                    echo [PASSED] Debug build
+                '''
+            }
+        }
+    }
+}
         
         stage('Run') {
             steps {
